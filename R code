@@ -14,56 +14,44 @@ date_to_excel_serial <- function(date) {
 
 data$Date_Serial <- sapply(data$Date, date_to_excel_serial)
 
-# Create a base ggplot object with box plot and individual data points
-p <- ggplot(data, aes(x = as.factor(Date_Serial), y = Data)) +
-  geom_boxplot(aes(color = Month), outlier.size = 1) +
-  geom_jitter(aes(color = Month), width = 0.2, alpha = 0.5) +
-  labs(title = "Box Plot of Data by Month with Individual Data Points and Provided Linear Trend Lines",
-       x = "Date",
-       y = "Data") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+# Convert 'Date' column to datetime
+data$Date <- as.Date(data$Date, format='%m/%d/%Y')
 
-# Define equations and days mapping for each month
-equations <- list(
-  July = list(eq = "-0.1852x + 8496.4", days = 31),
-  June = list(eq = "0.0319x - 1379", days = 30),
-  May = list(eq = "0.0549x - 2423.4", days = 31),
-  April = list(eq = "0.0642x - 2842", days = 30)
-)
+# Extract the month from the Date
+data$Month <- format(data$Date, "%B")
 
-# Function to plot trend lines and add annotations
-plot_trend_lines <- function(p, month, eq, days) {
-  start_date <- as.Date(paste0("2024-", month, "-01"))
-  end_date <- start_date + days(days - 1)
-  x_values <- seq(date_to_excel_serial(start_date), date_to_excel_serial(end_date))
-  
-  # Compute y values using the provided equation
-  if (month == "July") {
-    y_values <- -0.1852 * x_values + 8496.4
-  } else if (month == "June") {
-    y_values <- 0.0319 * x_values - 1379
-  } else if (month == "May") {
-    y_values <- 0.0549 * x_values - 2423.4
-  } else if (month == "April") {
-    y_values <- 0.0642 * x_values - 2842
-  }
-  
-  # Convert x values to dates
-  date_range <- as.Date(x_values - 2, origin = "1899-12-30")
-  
-  # Add trend line to the plot
-  p <- p + geom_line(aes(x = date_range, y = y_values), color = "blue") +
-    annotate("text", x = median(date_range), y = median(y_values), label = eq, color = "blue", size = 3, hjust = 0.5)
-  
-  return(p)
-}
+# Sort DataFrame by date
+data <- data %>% arrange(Date)
 
-# Plot the trend lines and add annotations
-for (month in names(equations)) {
-  eq <- equations[[month]]$eq
-  days <- equations[[month]]$days
-  p <- plot_trend_lines(p, month, eq, days)
-}
+# Calculate summary statistics for each month
+summary_stats <- data %>% 
+  group_by(Month) %>% 
+  summarize(
+    Min = min(Data),
+    Q1 = quantile(Data, 0.25),
+    Median = median(Data),
+    Q3 = quantile(Data, 0.75),
+    Max = max(Data),
+    IQR = IQR(Data)
+  )
 
-# Show the plot
+# Create the violin plot
+p <- ggplot(data, aes(x=Month, y=Data)) + 
+  geom_violin(fill="lightgray") +
+  geom_text(data=summary_stats, aes(x=Month, y=Min, label=paste0("Min: ", round(Min, 1))), 
+            color="blue", size=3, vjust=1.5) +
+  geom_text(data=summary_stats, aes(x=Month, y=Max, label=paste0("Max: ", round(Max, 1))), 
+            color="red", size=3, vjust=-0.5) +
+  geom_text(data=summary_stats, aes(x=Month, y=Q1, label=paste0("Q1: ", round(Q1, 1))), 
+            color="green", size=3, vjust=1.5) +
+  geom_text(data=summary_stats, aes(x=Month, y=Q3, label=paste0("Q3: ", round(Q3, 1))), 
+            color="green", size=3, vjust=-0.5) +
+  geom_segment(data=summary_stats, aes(x=as.numeric(Month), xend=as.numeric(Month), 
+                                       y=Q1, yend=Q3), 
+               color="black", linetype="dashed", size=1) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title="Violin Plot of Data by Month with Min, Max, and IQR", x="Month", y="Data")
+
+# Print the plot
 print(p)
